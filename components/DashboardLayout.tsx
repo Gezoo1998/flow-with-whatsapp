@@ -5,7 +5,7 @@ import { useAppStore, store, hasFullAccess } from "@/lib/store";
 import { 
   LayoutDashboard, Users, ClipboardCheck, Wallet, Menu, 
   LogOut, FolderKanban, BookOpen, GraduationCap, FileCheck2, 
-  Users2, Settings, RefreshCw, X, Sun, Moon
+  Users2, Settings, RefreshCw, X, Sun, Moon, Send
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useDarkMode } from "@/hooks/useDarkMode";
@@ -23,6 +23,7 @@ import SettingsView from "./SettingsView";
 import UsersView from "./UsersView";
 import SyncHubView from "./SyncHubView";
 import AdminPaymentsView from "./AdminPaymentsView";
+import WhatsAppAutomationView from "./WhatsAppAutomationView";
 
 export default function DashboardLayout() {
   const state = useAppStore((s) => s);
@@ -94,7 +95,7 @@ export default function DashboardLayout() {
   };
 
   // Check if active tab belongs to the "More" items category
-  const moreTabIds = ["groups", "recitations", "exams", "reports", "users", "sync_hub", "settings"];
+  const moreTabIds = ["groups", "recitations", "exams", "reports", "users", "sync_hub", "settings", "whatsapp_automation"];
   const isMoreActive = moreTabIds.includes(activeTab);
 
   const handleBottomTabClick = (tabId: string) => {
@@ -237,6 +238,7 @@ export default function DashboardLayout() {
         {activeTab === "users" && <UsersView />}
         {activeTab === "sync_hub" && <SyncHubView />}
         {activeTab === "admin_payments" && <AdminPaymentsView onNavigate={handleNavigate} />}
+        {activeTab === "whatsapp_automation" && <WhatsAppAutomationView />}
       </main>
 
       {/* Floating Bottom Navigation – MAXIMAL 5 items of highest frequency */}
@@ -433,6 +435,16 @@ export default function DashboardLayout() {
                 <RefreshCw className="w-5 h-5 text-slate-500" />
                 <span className="font-extrabold text-xs text-slate-800 dark:text-slate-200">غرفة المزامنة</span>
                 <span className="text-[9px] text-slate-500 dark:text-slate-400">سجل عمليات السنتر للربط</span>
+              </button>
+
+              {/* WhatsApp Automation */}
+              <button
+                onClick={() => handleNavigate("whatsapp_automation")}
+                className="flex flex-col items-start p-4 bg-emerald-500/10 dark:bg-emerald-950/30 hover:bg-emerald-500/20 dark:hover:bg-emerald-900/40 active:scale-95 transition border border-emerald-200 dark:border-emerald-800 rounded-2xl text-right space-y-1 col-span-2 cursor-pointer w-full text-slate-800 dark:text-slate-100"
+              >
+                <Send className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+                <span className="font-extrabold text-xs text-slate-900 dark:text-white">أتمتة الواتساب التلقائي (Chrome Extension) 🚀</span>
+                <span className="text-[9px] text-slate-500 dark:text-slate-400">إرسال تقارير التسميع والامتحانات تلقائياً لأولياء الأمور مجاناً 100%</span>
               </button>
 
               {/* Settings */}

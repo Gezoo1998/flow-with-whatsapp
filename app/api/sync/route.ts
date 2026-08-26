@@ -219,6 +219,24 @@ export async function POST(req: NextRequest) {
   const session = getServerSession(req);
   const isAuthenticated = Boolean(session);
   console.log(`[SYNC POST] whether centerflow_session exists: ${hasSessionCookie}, authenticated: ${isAuthenticated}`);
+
+  if (!session) {
+    return NextResponse.json(
+      { status: "error", message: "تنبيه: غير مصرح بتنفيذ المزامنة - يرجى تسجيل الدخول أولاً" },
+      { status: 401 }
+    );
+  }
+
+  const body = await req.json();
+  const { localState, pendingEvents, forceOverwrite } = body || {};
+
+  if (forceOverwrite && session.role !== "teacher") {
+    return NextResponse.json(
+      { status: "error", message: "تنبيه: ميزة المزامنة الشاملة القسرية (forceOverwrite) مقتصرة حصرياً على المعلم فقط" },
+      { status: 403 }
+    );
+  }
+
   const sql = getSql();
   if (!sql) {
     return NextResponse.json({
@@ -230,29 +248,14 @@ export async function POST(req: NextRequest) {
   try {
     await ensureSchemaSetup();
 
-    if (!session) {
-      return NextResponse.json(
-        { status: "error", message: "تنبيه: غير مصرح بتنفيذ المزامنة - يرجى تسجيل الدخول أولاً" },
-        { status: 401 }
-      );
-    }
-
     const existingRows = await sql`
       SELECT payload FROM system_data WHERE id = 'center_v1' LIMIT 1
     `;
     const hasExistingData = existingRows.length > 0 && existingRows[0].payload;
 
-    const { localState, pendingEvents, forceOverwrite } = await req.json();
-
     let serverState: any = null;
 
     if (forceOverwrite) {
-      if (session?.role !== "teacher") {
-        return NextResponse.json(
-          { status: "error", message: "تنبيه: ميزة المزامنة الشاملة القسرية (forceOverwrite) مقتصرة حصرياً على المعلم فقط" },
-          { status: 403 }
-        );
-      }
       console.log("[POST Sync] Full-state force overwrite requested by teacher. Bypassing event replay merge.");
       serverState = localState;
     } else {

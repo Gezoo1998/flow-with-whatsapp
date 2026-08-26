@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "CenterFlow WhatsApp Automation Engine",
+  "version": "1.0.0",
+  "description": "إضافة متصفح مخصصة لأتمتة إرسال تقارير ونتائج الطلاب عبر واتساب ويب مجاناً وبدون سيرفرات",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "exclude_matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content-app.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content-wa.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
