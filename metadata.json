@@ -1,0 +1,6 @@
+{
+  "name": "CenterFlow",
+  "description": "CenterFlow - منصة سحابية متكاملة لإدارة المراكز التعليمية والحصص والطلاب للحضور والغياب، المدفوعات، الامتحانات والتقارير المتقدمة للجهتين المعلم والسكرتارية.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
