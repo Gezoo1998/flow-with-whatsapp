@@ -221,9 +221,9 @@ function advanceQueueWithRandomDelay() {
     return;
   }
 
-  // Base delay: 3 seconds (3000 ms) between messages
+  // Base delay: 5 seconds (5000 ms) between messages
   // Throttling: After every 10 messages, pause for 1 minute (60,000 ms)
-  let delayMs = 3000;
+  let delayMs = 5000;
   if (currentBatch.currentIndex % 10 === 0) {
     delayMs = 60000; // 1 minute rest after 10 messages
     console.log(`[CenterFlow WA] 1-minute safety rest after 10 messages (Index: ${currentBatch.currentIndex})`);
