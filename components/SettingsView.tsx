@@ -660,12 +660,17 @@ export default function SettingsView() {
     }
     if (!secName.trim() || !secPin.trim()) return;
 
-    store.addSecretary(secName.trim(), secPin.trim());
-    setSecName("");
-    setSecPin("");
-    setIsAddingSec(false);
-    setSuccessMsg("تم إضافة السكرتيرة بنجاح!");
-    setTimeout(() => setSuccessMsg(""), 2000);
+    const res = store.addSecretary(secName.trim(), secPin.trim());
+    if (res.success) {
+      setSecName("");
+      setSecPin("");
+      setIsAddingSec(false);
+      setSuccessMsg(res.message || "تم إضافة السكرتيرة بنجاح!");
+      setTimeout(() => setSuccessMsg(""), 2000);
+    } else {
+      setErrorMsg(res.message || "فشلت عملية الإضافة!");
+      setTimeout(() => setErrorMsg(""), 3500);
+    }
   };
 
   const handleExportBackup = () => {
