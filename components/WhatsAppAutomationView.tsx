@@ -45,13 +45,14 @@ export default function WhatsAppAutomationView() {
   const [sendQueue, setSendQueue] = useState<StudentSendItem[]>([]);
   const [completedCount, setCompletedCount] = useState<number>(0);
   const [failedCount, setFailedCount] = useState<number>(0);
+  const [pauseNoticeMsg, setPauseNoticeMsg] = useState<string>("");
 
   // Auto-detect Chrome Extension handshake via window message
   useEffect(() => {
     const handleWindowMessage = (event: MessageEvent) => {
       if (!event.data || typeof event.data !== "object") return;
 
-      const { type, studentId, success, reason, batchId } = event.data;
+      const { type, studentId, success, reason, batchId, message } = event.data;
 
       if (type === "CENTERFLOW_EXTENSION_PONG") {
         setIsExtensionConnected(true);
@@ -72,13 +73,17 @@ export default function WhatsAppAutomationView() {
         );
         setFailedCount((f) => f + 1);
       } else if (type === "WHATSAPP_ITEM_SENDING") {
+        setPauseNoticeMsg("");
         setSendQueue((prev) =>
           prev.map((item) =>
             item.studentId === studentId ? { ...item, status: "sending" } : item
           )
         );
+      } else if (type === "WHATSAPP_BATCH_PAUSED") {
+        setPauseNoticeMsg(message || "فترة استراحة آمنة لمدة دقيقة واحدة...");
       } else if (type === "WHATSAPP_BATCH_COMPLETE" || type === "WHATSAPP_BATCH_STOPPED") {
         setIsSending(false);
+        setPauseNoticeMsg("");
         setSendQueue((prev) =>
           prev.map((item) => (item.status === "sending" ? { ...item, status: "idle" } : item))
         );
@@ -479,7 +484,7 @@ export default function WhatsAppAutomationView() {
               <Send className="w-4 h-4 text-emerald-600" /> التحكم بالطابور والإرسال التلقائي
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              يتم التنقل التلقائي بين أرقام الواتساب بمهلة أمان عشوائية (5-8 ثوان) لمنع حظر الرقم.
+              يتم التنقل بمعدل 3 ثوانٍ بين الرسائل، وتوقف آمن لمدة دقيقة واحدة تلقائياً بعد كل 10 رسائل لضمان حماية الرقم.
             </p>
           </div>
 
@@ -500,6 +505,14 @@ export default function WhatsAppAutomationView() {
             </button>
           )}
         </div>
+
+        {/* 1-Minute Safety Pause Notice Banner */}
+        {pauseNoticeMsg && (
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl flex items-center gap-2 text-xs font-extrabold text-blue-800 dark:text-blue-200 animate-pulse" dir="rtl">
+            <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>{pauseNoticeMsg}</span>
+          </div>
+        )}
 
         {/* Progress Bar */}
         {totalCount > 0 && (

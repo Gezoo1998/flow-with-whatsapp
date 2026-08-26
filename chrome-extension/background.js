@@ -216,12 +216,29 @@ function advanceQueueWithRandomDelay() {
   currentBatch.currentIndex++;
   clearDelayTimer();
 
-  // Anti-Ban safety delay between 5 to 8 seconds
-  const randomDelay = Math.floor(Math.random() * 3000) + 5000;
+  if (currentBatch.currentIndex >= currentBatch.items.length) {
+    processNextItem();
+    return;
+  }
+
+  // Base delay: 3 seconds (3000 ms) between messages
+  // Throttling: After every 10 messages, pause for 1 minute (60,000 ms)
+  let delayMs = 3000;
+  if (currentBatch.currentIndex % 10 === 0) {
+    delayMs = 60000; // 1 minute rest after 10 messages
+    console.log(`[CenterFlow WA] 1-minute safety rest after 10 messages (Index: ${currentBatch.currentIndex})`);
+    notifyApp({
+      type: "WHATSAPP_BATCH_PAUSED",
+      batchId: currentBatch.batchId,
+      message: `فترة استراحة آمنة (دقيقة واحدة) بعد إرسال 10 رسائل... سيتأستأنف الإرسال تلقائياً (الرسالة ${currentBatch.currentIndex + 1} من ${currentBatch.totalCount})`,
+      resumeInMs: 60000
+    });
+  }
+
   delayTimer = setTimeout(() => {
     delayTimer = null;
     processNextItem();
-  }, randomDelay);
+  }, delayMs);
 }
 
 async function getOrCreateWaTab() {
