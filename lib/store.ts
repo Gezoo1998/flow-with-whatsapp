@@ -1299,19 +1299,25 @@ class StateStore {
   // RESTORE backup/json
   public restoreSystemData = (backupJson: string) => {
     try {
-      const parsed = JSON.parse(backupJson);
+      const parsed = typeof backupJson === "string" ? JSON.parse(backupJson) : backupJson;
       if (
-        parsed.students &&
-        parsed.groups &&
-        parsed.secretaries &&
-        parsed.teacherPin
+        parsed &&
+        (Array.isArray(parsed.students) ||
+          Array.isArray(parsed.groups) ||
+          Array.isArray(parsed.recitations) ||
+          Array.isArray(parsed.exams) ||
+          Array.isArray(parsed.secretaries))
       ) {
         const restoredTemplates = parsed.whatsappTemplates || this.state.whatsappTemplates || INITIAL_STATE.whatsappTemplates;
+        const restoredTeacherPin = parsed.teacherPin || this.state.teacherPin || INITIAL_STATE.teacherPin;
+
         this.setState({
           ...parsed,
+          teacherPin: restoredTeacherPin,
           whatsappTemplates: restoredTemplates
         });
         this.forceSyncWholeState();
+        this.logActivity("استرجاع سجلات النظام", "تمت استعادة البيانات من ملف النسخة الاحتياطية بنجاح");
         return { success: true, message: "تم استيراد نسخة البيانات الاحتياطية وتحديث النظام بنجاح!" };
       }
       return { success: false, message: "صيغة الملف المستورد غير متطابقة مع مصفوفة النظام." };

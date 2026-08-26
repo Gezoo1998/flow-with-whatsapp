@@ -5,7 +5,7 @@ import { useAppStore, store } from "@/lib/store";
 import { 
   Plus, Trash2, Key, Info, RefreshCw, Layers, 
   FileDown, FileUp, FileSpreadsheet, Check, HelpCircle, AlertCircle,
-  MessageSquare, Undo2, Sparkles, CheckCircle2, Shield, Clock
+  MessageSquare, Undo2, Sparkles, CheckCircle2, Shield, Clock, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
@@ -38,6 +38,12 @@ export default function SettingsView() {
   const [exportGroupId, setExportGroupId] = useState("all");
   const [importGroupId, setImportGroupId] = useState("");
   const [parsedStudents, setParsedStudents] = useState<any[]>([]);
+
+  // Full System Data Backup Restore states
+  const [restoreRawJson, setRestoreRawJson] = useState<string>("");
+  const [restoreParsedData, setRestoreParsedData] = useState<any | null>(null);
+  const [showRestoreConfirmModal, setShowRestoreConfirmModal] = useState<boolean>(false);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
 
   // Excel/CSV Template download helper
   const handleDownloadTemplate = () => {
@@ -153,6 +159,321 @@ export default function SettingsView() {
     } catch (err) {
       console.error(err);
       setErrorMsg("حدث خطأ أثناء تصدير كشوف الطلاب لمستند Excel!");
+    }
+  };
+
+  // 1. Full Multi-Sheet Excel Export (.xlsx) - ALL SYSTEM DATA
+  const handleExportFullExcel = () => {
+    try {
+      const dateStr = new Date().toISOString().split("T")[0];
+      const workbook = XLSX.utils.book_new();
+
+      // Sheet 1: الطلاب (Students)
+      const studentsHeaders = ["كود الطالب", "اسم الطالب", "رقم هاتف الطالب", "رقم هاتف ولي الأمر", "المجموعة", "العنوان", "الاشتراك المخصص", "ملاحظات", "تاريخ الانضمام", "الحالة"];
+      const studentsRows = (state.students || []).map((st) => {
+        const gp = (state.groups || []).find((g) => g.id === st.groupId);
+        return [
+          st.id,
+          st.name,
+          st.phone || "",
+          st.parentPhone || "",
+          gp ? gp.name : "غير محدد",
+          st.address || "",
+          st.customFee || 0,
+          st.notes || "",
+          st.joinDate || "",
+          st.status === "active" ? "نشط" : "مؤرشف"
+        ];
+      });
+      const wsStudents = XLSX.utils.aoa_to_sheet([studentsHeaders, ...studentsRows]);
+      wsStudents["!cols"] = [{ wch: 15 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(workbook, wsStudents, "الطلاب");
+
+      // Sheet 2: المجموعات (Groups)
+      const groupsHeaders = ["كود المجموعة", "اسم المجموعة", "الاشتراك الشهري", "وقت البداية", "وقت النهاية", "أيام الأسبوع", "الوصف"];
+      const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+      const groupsRows = (state.groups || []).map((g) => [
+        g.id,
+        g.name,
+        g.monthlyFee || 0,
+        g.startTime || "",
+        g.endTime || "",
+        Array.isArray(g.daysOfWeek) ? g.daysOfWeek.map((d) => dayNames[d] || d).join(" - ") : "",
+        g.description || ""
+      ]);
+      const wsGroups = XLSX.utils.aoa_to_sheet([groupsHeaders, ...groupsRows]);
+      wsGroups["!cols"] = [{ wch: 15 }, { wch: 22 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(workbook, wsGroups, "المجموعات");
+
+      // Sheet 3: التسميعات الكويزات (Recitations)
+      const recHeaders = ["كود التسميع", "عنوان التسميع", "المجموعة", "النهاية العظمى", "التاريخ", "عدد الطلاب المقيّمين"];
+      const recRows = (state.recitations || []).map((r) => {
+        const gp = (state.groups || []).find((g) => g.id === r.groupId);
+        const evalCount = Object.keys(r.scores || {}).length;
+        return [r.id, r.title, gp ? gp.name : "غير محدد", r.maxScore, r.date, evalCount];
+      });
+      const wsRec = XLSX.utils.aoa_to_sheet([recHeaders, ...recRows]);
+      wsRec["!cols"] = [{ wch: 15 }, { wch: 25 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(workbook, wsRec, "التسميعات والكويزات");
+
+      // Sheet 4: الامتحانات الرئيسية (Exams)
+      const examHeaders = ["كود الامتحان", "عنوان الامتحان", "المجموعات المستهدفة", "النهاية العظمى", "التاريخ", "الوصف", "عدد الطلاب المقيّمين"];
+      const examRows = (state.exams || []).map((e) => {
+        const groupNames = Array.isArray(e.targetGroupIds)
+          ? e.targetGroupIds.map((gid) => (state.groups || []).find((g) => g.id === gid)?.name || gid).join(" - ")
+          : "كل المجموعات";
+        const evalCount = Object.keys(e.scores || {}).length;
+        return [e.id, e.title, groupNames, e.maxScore, e.date, e.description || "", evalCount];
+      });
+      const wsExam = XLSX.utils.aoa_to_sheet([examHeaders, ...examRows]);
+      wsExam["!cols"] = [{ wch: 15 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(workbook, wsExam, "الامتحانات الرئيسية");
+
+      // Sheet 5: درجات الطلاب التفصيلية (Detailed Scores)
+      const scoresHeaders = ["نوع التقييم", "عنوان التقييم", "كود الطالب", "اسم الطالب", "المجموعة", "الدرجة المسجلة", "النهاية العظمى", "التاريخ"];
+      const scoresRows: any[] = [];
+
+      (state.recitations || []).forEach((r) => {
+        const gp = (state.groups || []).find((g) => g.id === r.groupId);
+        Object.entries(r.scores || {}).forEach(([studentId, score]) => {
+          const st = (state.students || []).find((s) => s.id === studentId);
+          scoresRows.push([
+            "تسميع / كويز",
+            r.title,
+            studentId,
+            st ? st.name : "طالب محذوف",
+            gp ? gp.name : "غير محدد",
+            score,
+            r.maxScore,
+            r.date
+          ]);
+        });
+      });
+
+      (state.exams || []).forEach((e) => {
+        Object.entries(e.scores || {}).forEach(([studentId, score]) => {
+          const st = (state.students || []).find((s) => s.id === studentId);
+          const gp = st ? (state.groups || []).find((g) => g.id === st.groupId) : null;
+          scoresRows.push([
+            "امتحان رئيسي",
+            e.title,
+            studentId,
+            st ? st.name : "طالب محذوف",
+            gp ? gp.name : "غير محدد",
+            score,
+            e.maxScore,
+            e.date
+          ]);
+        });
+      });
+
+      const wsScores = XLSX.utils.aoa_to_sheet([scoresHeaders, ...scoresRows]);
+      wsScores["!cols"] = [{ wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 22 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(workbook, wsScores, "كشف الدرجات التفصيلي");
+
+      // Sheet 6: الحضور والغياب (Attendance)
+      const attHeaders = ["كود السجل", "اسم المجموعة", "التاريخ", "عدد الحاضرين", "عدد الغائبين", "عدد المتأخرين"];
+      const attRows = (state.attendance || []).map((att) => {
+        const gp = (state.groups || []).find((g) => g.id === att.groupId);
+        return [
+          att.id,
+          gp ? gp.name : "غير محدد",
+          att.date,
+          Array.isArray(att.presentStudentIds) ? att.presentStudentIds.length : 0,
+          Array.isArray(att.absentStudentIds) ? att.absentStudentIds.length : 0,
+          Array.isArray(att.lateStudentIds) ? att.lateStudentIds.length : 0
+        ];
+      });
+      const wsAtt = XLSX.utils.aoa_to_sheet([attHeaders, ...attRows]);
+      wsAtt["!cols"] = [{ wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(workbook, wsAtt, "الحضور والغياب");
+
+      // Sheet 7: المدفوعات والتحصيل (Payments)
+      const payHeaders = ["كود الفاتورة", "اسم الطالب", "الشهر المستهدف", "المبلغ المدفوع", "التاريخ والوقت", "صلاحية المكتّب", "اسم المسجل", "ملاحظات"];
+      const payRows = (state.payments || []).map((p) => {
+        const st = (state.students || []).find((s) => s.id === p.studentId);
+        return [
+          p.id,
+          st ? st.name : "غير معروف",
+          p.month,
+          p.amount,
+          p.date,
+          p.recordedBy === "teacher" ? "أدمن" : "مشرف",
+          p.recordedByName || "",
+          p.notes || ""
+        ];
+      });
+      const wsPay = XLSX.utils.aoa_to_sheet([payHeaders, ...payRows]);
+      wsPay["!cols"] = [{ wch: 15 }, { wch: 22 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 18 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(workbook, wsPay, "المدفوعات والاشتراكات");
+
+      // Sheet 8: ملاحظات الطلاب وسجل العمليات (Notes & Activity Logs)
+      const logHeaders = ["التاريخ والوقت", "النوع / العملية", "اسم الطالب / المستخدم", "التفاصيل والملاحظة"];
+      const logRows = [
+        ...(state.studentNotes || []).map((n) => {
+          const st = (state.students || []).find((s) => s.id === n.studentId);
+          return [n.date, `ملاحظة طالب (${n.type})`, st ? st.name : "", n.content];
+        }),
+        ...(state.activityLogs || []).map((l) => [l.timestamp, l.actionType, l.recordedByName, l.details])
+      ];
+      const wsLog = XLSX.utils.aoa_to_sheet([logHeaders, ...logRows]);
+      wsLog["!cols"] = [{ wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 35 }];
+      XLSX.utils.book_append_sheet(workbook, wsLog, "الملاحظات وسجل العمليات");
+
+      XLSX.writeFile(workbook, `سجلات_مركز_CenterFlow_الشاملة_${dateStr}.xlsx`);
+      setSuccessMsg("تم تصدير كافة بيانات وسجلات النظام الشاملة بملف Excel (.xlsx) بنجاح!");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      console.error("Full Excel export error:", err);
+      setErrorMsg("حدث خطأ أثناء تصدير كافة البيانات لمستند Excel!");
+    }
+  };
+
+  // 2. Full System Backup JSON Export (.json)
+  const handleExportFullJSON = () => {
+    try {
+      const dateStr = new Date().toISOString().split("T")[0];
+      const cleanData = JSON.parse(JSON.stringify(state));
+      delete cleanData.teacherPin;
+
+      const jsonStr = JSON.stringify(cleanData, null, 2);
+      const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `سجلات_مركز_CenterFlow_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setSuccessMsg("تم تصدير النسخة الاحتياطية الشاملة بصيغة JSON بنجاح!");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      console.error("JSON export error:", err);
+      setErrorMsg("حدث خطأ أثناء تصدير ملف النسخة الاحتياطية JSON!");
+    }
+  };
+
+  // 3. Multi-Section Structured CSV Export (.csv)
+  const handleExportFullCSV = () => {
+    try {
+      const dateStr = new Date().toISOString().split("T")[0];
+      let csvContent = "\ufeff"; // UTF-8 BOM
+
+      // SECTION 1: STUDENTS
+      csvContent += "--- كشف الطلاب ---\n";
+      csvContent += "كود الطالب,اسم الطالب,الهاتف,هاتف ولي الأمر,المجموعة,العنوان,الاشتراك,ملاحظات,التاريخ,الحالة\n";
+      (state.students || []).forEach((st) => {
+        const gp = (state.groups || []).find((g) => g.id === st.groupId);
+        const name = (st.name || "").replace(/,/g, " ");
+        const notes = (st.notes || "").replace(/,/g, " ");
+        const addr = (st.address || "").replace(/,/g, " ");
+        csvContent += `${st.id},${name},${st.phone || ""},${st.parentPhone || ""},${gp ? gp.name : "غير محدد"},${addr},${st.customFee || 0},${notes},${st.joinDate || ""},${st.status}\n`;
+      });
+
+      // SECTION 2: RECITATIONS
+      csvContent += "\n--- كشف التسميعات والكويزات ---\n";
+      csvContent += "كود التسميع,عنوان التسميع,المجموعة,النهاية العظمى,التاريخ\n";
+      (state.recitations || []).forEach((r) => {
+        const gp = (state.groups || []).find((g) => g.id === r.groupId);
+        const title = (r.title || "").replace(/,/g, " ");
+        csvContent += `${r.id},${title},${gp ? gp.name : "غير محدد"},${r.maxScore},${r.date}\n`;
+      });
+
+      // SECTION 3: EXAMS
+      csvContent += "\n--- كشف الامتحانات الرئيسية ---\n";
+      csvContent += "كود الامتحان,عنوان الامتحان,النهاية العظمى,التاريخ\n";
+      (state.exams || []).forEach((e) => {
+        const title = (e.title || "").replace(/,/g, " ");
+        csvContent += `${e.id},${title},${e.maxScore},${e.date}\n`;
+      });
+
+      // SECTION 4: PAYMENTS
+      csvContent += "\n--- كشف المدفوعات والتحصيل ---\n";
+      csvContent += "كود الفاتورة,اسم الطالب,الشهر,المبلغ,التاريخ والوقت,اسم المسجل\n";
+      (state.payments || []).forEach((p) => {
+        const st = (state.students || []).find((s) => s.id === p.studentId);
+        const stName = st ? st.name.replace(/,/g, " ") : "غير معروف";
+        csvContent += `${p.id},${stName},${p.month},${p.amount},${p.date},${p.recordedByName || ""}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `سجلات_مركز_CenterFlow_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setSuccessMsg("تم تصدير كافة البيانات والتقارير بصيغة CSV بنجاح!");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      console.error("CSV export error:", err);
+      setErrorMsg("حدث خطأ أثناء تصدير ملفات CSV!");
+    }
+  };
+
+  // JSON Backup File Uploader & Inspector Handler
+  const handleImportBackupFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorMsg("");
+    setSuccessMsg("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fileReader = new FileReader();
+    fileReader.readAsText(file, "UTF-8");
+    fileReader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+
+        if (
+          parsed &&
+          (Array.isArray(parsed.students) ||
+            Array.isArray(parsed.groups) ||
+            Array.isArray(parsed.recitations) ||
+            Array.isArray(parsed.exams) ||
+            Array.isArray(parsed.secretaries))
+        ) {
+          setRestoreRawJson(text);
+          setRestoreParsedData(parsed);
+          setShowRestoreConfirmModal(true);
+        } else {
+          setErrorMsg("صيغة ملف النسخة الاحتياطية غير متطابقة مع هيكل بيانات النظام!");
+        }
+      } catch (err) {
+        console.error("Backup JSON parse error:", err);
+        setErrorMsg("تعذر قراءة ملف النسخة الاحتياطية! تأكد من اختيار ملف JSON صحيح.");
+      }
+    };
+  };
+
+  // Confirm Full System Restore Execution
+  const handleConfirmRestore = async () => {
+    if (!restoreRawJson || isRestoring) return;
+    setIsRestoring(true);
+
+    try {
+      const result = store.restoreSystemData(restoreRawJson);
+      if (result.success) {
+        setSuccessMsg(result.message);
+        setShowRestoreConfirmModal(false);
+        setRestoreRawJson("");
+        setRestoreParsedData(null);
+        setTimeout(() => setSuccessMsg(""), 4000);
+      } else {
+        setErrorMsg(result.message);
+      }
+    } catch (err) {
+      console.error("Restore error:", err);
+      setErrorMsg("حدث خطأ غير متوقع أثناء استرجاع بيانات النظام!");
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -754,10 +1075,75 @@ export default function SettingsView() {
             <input 
               type="file" 
               accept=".json"
-              onChange={handleImportBackup}
+              onChange={handleImportBackupFile}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
           </div>
+        </div>
+      </div>
+
+      {/* SECTION Full System Data Export & Backup (NEW FEATURE) */}
+      <div className="bg-white dark:bg-slate-900 p-5 border border-slate-150 dark:border-slate-800 rounded-3xl space-y-4 shadow-3xs" id="full_system_export_section">
+        <h3 className="text-sm font-black text-slate-900 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-2">
+          <FileSpreadsheet className="w-4.5 h-4.5 text-emerald-600" />
+          <span>تصدير كافة بيانات وسجلات النظام والنسخ الاحتياطي الشامل 📦</span>
+        </h3>
+
+        <p className="text-3xs text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
+          يمكنك الآن استخراج وتصدير جميع السجلات المقيدة بالنظام (الطلاب، المجموعات، درجات التسميعات والامتحانات التفصيلية، الحضور، المدفوعات، وسجل العمليات) بأكثر من صيغة للحفظ أو النقل:
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          {/* Option 1: Excel (.xlsx) */}
+          <button
+            type="button"
+            onClick={handleExportFullExcel}
+            className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/60 hover:border-emerald-400 rounded-2xl text-right space-y-2 cursor-pointer transition active:scale-95 group shadow-2xs"
+          >
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-extrabold text-xs text-slate-900 dark:text-white block">تصدير كـ ملف Excel شامل (.xlsx)</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mt-0.5">
+                كراسة عمل بها 8 تبويبات تفصيلية لكل سجلات الطلاب والمجموعات والدرجات والمدفوعات
+              </span>
+            </div>
+          </button>
+
+          {/* Option 2: JSON Backup (.json) */}
+          <button
+            type="button"
+            onClick={handleExportFullJSON}
+            className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800/60 hover:border-blue-400 rounded-2xl text-right space-y-2 cursor-pointer transition active:scale-95 group shadow-2xs"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition">
+              <FileDown className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-extrabold text-xs text-slate-900 dark:text-white block">نسخة احتياطية كاملة (.json)</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mt-0.5">
+                ملف بيانات مهيكل وشامل لكل السيستم مجهز لاستعادة النظام أو النقل فوراً
+              </span>
+            </div>
+          </button>
+
+          {/* Option 3: CSV (.csv) */}
+          <button
+            type="button"
+            onClick={handleExportFullCSV}
+            className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-800/60 hover:border-amber-400 rounded-2xl text-right space-y-2 cursor-pointer transition active:scale-95 group shadow-2xs"
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition">
+              <FileUp className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-extrabold text-xs text-slate-900 dark:text-white block">تصدير كـ ملفات جدولية (.csv)</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block mt-0.5">
+                ملف جدول منظم مع تشفير UTF-8 لفتح اللغة العربية بسلاسة في برنامج إكسيل
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -1023,6 +1409,102 @@ export default function SettingsView() {
           </button>
         </form>
       </div>
+
+      {/* Restore Confirmation Modal */}
+      <AnimatePresence>
+        {showRestoreConfirmModal && restoreParsedData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowRestoreConfirmModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-[3px]"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl relative w-full max-w-md space-y-4 z-10 text-right"
+              dir="rtl"
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="font-extrabold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" /> معاينة وتأكيد استرجاع سجلات النظام
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowRestoreConfirmModal(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Warning Alert */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-2xl flex items-start gap-2 text-xs font-bold text-amber-800 dark:text-amber-200">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  ⚠️ تنبيه هام: سيتم استرجاع البيانات المكتشفة بالملف واستبدال كافة كشوف السنتر بالحالة المسجلة فيها وتحديث قاعدة البيانات السحابية فوراً.
+                </span>
+              </div>
+
+              {/* File Content Preview Metrics Grid */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400 block">
+                  📋 البيانات المكتشفة داخل ملف النسخة الاحتياطية:
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                  <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">الطلاب:</span>
+                    <span className="text-blue-600 font-extrabold font-mono text-sm">
+                      {Array.isArray(restoreParsedData.students) ? restoreParsedData.students.length : 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">المجموعات:</span>
+                    <span className="text-indigo-600 font-extrabold font-mono text-sm">
+                      {Array.isArray(restoreParsedData.groups) ? restoreParsedData.groups.length : 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">التسميعات:</span>
+                    <span className="text-purple-600 font-extrabold font-mono text-sm">
+                      {Array.isArray(restoreParsedData.recitations) ? restoreParsedData.recitations.length : 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">الامتحانات:</span>
+                    <span className="text-emerald-600 font-extrabold font-mono text-sm">
+                      {Array.isArray(restoreParsedData.exams) ? restoreParsedData.exams.length : 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions Buttons */}
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmRestore}
+                  disabled={isRestoring}
+                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 transition text-white text-xs font-black rounded-xl cursor-pointer shadow-md flex items-center justify-center gap-2 select-none disabled:opacity-50"
+                >
+                  {isRestoring ? "جاري الاسترجاع والمزامنة..." : "تأكيد استرجاع بيانات السيستم فورا 🚀"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRestoreConfirmModal(false)}
+                  className="py-3 px-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
