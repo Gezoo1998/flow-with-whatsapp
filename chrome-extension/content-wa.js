@@ -63,15 +63,16 @@
 
       setTimeout(() => {
         try {
-          // Trigger precise click event
-          const clickEvent = new MouseEvent("click", {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          });
-          clickableBtn.dispatchEvent(clickEvent);
+          // Trigger click event on send button EXACTLY ONCE to prevent double sending
           if (typeof clickableBtn.click === "function") {
             clickableBtn.click();
+          } else {
+            const clickEvent = new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            clickableBtn.dispatchEvent(clickEvent);
           }
 
           console.log(`[CenterFlow WA] Send button clicked successfully for student: ${studentId}`);

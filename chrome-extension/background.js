@@ -7,6 +7,7 @@ let currentBatch = null;
 let isProcessing = false;
 let waTabId = null;
 let watchdogTimer = null;
+let delayTimer = null;
 
 const WATCHDOG_TIMEOUT_MS = 14000; // 14 Seconds Safety Watchdog Timer
 
@@ -26,11 +27,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+function clearDelayTimer() {
+  if (delayTimer) {
+    clearTimeout(delayTimer);
+    delayTimer = null;
+  }
+}
+
 async function handleStartBatch(payload) {
   if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
     notifyApp({ type: "WHATSAPP_BATCH_ERROR", error: "الطابور فارغ" });
     return;
   }
+
+  clearDelayTimer();
+  clearWatchdog();
 
   currentBatch = {
     batchId: payload.batchId || Date.now().toString(),
@@ -53,9 +64,16 @@ async function handleStartBatch(payload) {
 
 function handleStopBatch() {
   clearWatchdog();
+  clearDelayTimer();
   isProcessing = false;
   const batchId = currentBatch ? currentBatch.batchId : null;
   currentBatch = null;
+
+  if (waTabId) {
+    chrome.tabs.update(waTabId, { url: "https://web.whatsapp.com/" }, () => {
+      if (chrome.runtime.lastError) {}
+    });
+  }
 
   notifyApp({
     type: "WHATSAPP_BATCH_STOPPED",
@@ -196,10 +214,12 @@ function advanceQueueWithRandomDelay() {
   if (!isProcessing || !currentBatch) return;
 
   currentBatch.currentIndex++;
+  clearDelayTimer();
 
   // Anti-Ban safety delay between 5 to 8 seconds
   const randomDelay = Math.floor(Math.random() * 3000) + 5000;
-  setTimeout(() => {
+  delayTimer = setTimeout(() => {
+    delayTimer = null;
     processNextItem();
   }, randomDelay);
 }

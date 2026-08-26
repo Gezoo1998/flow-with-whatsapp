@@ -79,9 +79,14 @@ export default function WhatsAppAutomationView() {
         );
       } else if (type === "WHATSAPP_BATCH_COMPLETE" || type === "WHATSAPP_BATCH_STOPPED") {
         setIsSending(false);
+        setSendQueue((prev) =>
+          prev.map((item) => (item.status === "sending" ? { ...item, status: "idle" } : item))
+        );
         store.logActivity(
           "أتمتة الواتساب",
-          `اكتملت دفعة إرسال نتائج الواتساب (دفعة ${batchId || ""})`
+          type === "WHATSAPP_BATCH_STOPPED"
+            ? `تم إيقاف دفعة إرسال الواتساب مؤقتاً`
+            : `اكتملت دفعة إرسال نتائج الواتساب (دفعة ${batchId || ""})`
         );
       }
     };
@@ -261,6 +266,9 @@ export default function WhatsAppAutomationView() {
   const handleStopSending = () => {
     window.postMessage({ type: "STOP_WHATSAPP_BATCH" }, "*");
     setIsSending(false);
+    setSendQueue((prev) =>
+      prev.map((item) => (item.status === "sending" ? { ...item, status: "idle" } : item))
+    );
   };
 
   const totalCount = sendQueue.length;
