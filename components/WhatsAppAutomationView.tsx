@@ -203,7 +203,8 @@ export default function WhatsAppAutomationView() {
           absent: 0,
           attendanceRate: 100,
           scoresStr: scoreStr
-        }
+        },
+        state.teacherName
       );
 
       const actualPhone = student.parentPhone || student.phone || "";
@@ -484,7 +485,7 @@ export default function WhatsAppAutomationView() {
               <Send className="w-4 h-4 text-emerald-600" /> التحكم بالطابور والإرسال التلقائي
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              يتم التنقل بمعدل 5 ثوانٍ بين الرسائل، وتوقف آمن لمدة دقيقة واحدة تلقائياً بعد كل 10 رسائل لضمان حماية الرقم.
+              يتم التنقل بمعدل 12 ثانية بين الرسائل، وتوقف آمن لمدة دقيقة واحدة تلقائياً بعد كل 10 رسائل لضمان حماية الرقم.
             </p>
           </div>
 

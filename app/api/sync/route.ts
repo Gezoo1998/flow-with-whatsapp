@@ -278,6 +278,7 @@ export async function POST(req: NextRequest) {
           academicYear: localState.academicYear || "2026/2027",
           teacherPin: localState.teacherPin || "2026",
           teacherName: localState.teacherName || "",
+          subject: localState.subject || "mathematics",
           centerName: localState.centerName || "",
           subjectName: localState.subjectName || "",
         };

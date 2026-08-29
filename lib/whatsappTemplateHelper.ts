@@ -11,7 +11,8 @@ export function fillWhatsAppTemplate(
     absent: number;
     attendanceRate: number;
     scoresStr: string;
-  }
+  },
+  teacherName?: string
 ): string {
   const subjLabel = 
     subject === "mathematics" 
@@ -34,10 +35,16 @@ export function fillWhatsAppTemplate(
       ? "الدراسات 🌍"
       : "المادة العلمية";
 
+  const teacherDisplay = teacherName ? teacherName : "المعلم الفاضل";
+
   return templateText
     .replace(/\[اسم_الطالب\]/g, student.name)
     .replace(/\[المجموعة\]/g, group ? group.name : "غير محدد")
     .replace(/\[المادة\]/g, subjLabel)
+    .replace(/\[اسم_المعلم\]/g, teacherDisplay)
+    .replace(/\[المعلم\]/g, teacherDisplay)
+    .replace(/\[اسم_المدرس\]/g, teacherDisplay)
+    .replace(/\[المدرس\]/g, teacherDisplay)
     .replace(/\[الحالة\]/g, `${stats.attendanceRate}%`)
     .replace(/\[حضر\]/g, String(stats.present))
     .replace(/\[غاب\]/g, String(stats.absent))

@@ -9,7 +9,7 @@ let waTabId = null;
 let watchdogTimer = null;
 let delayTimer = null;
 
-const WATCHDOG_TIMEOUT_MS = 14000; // 14 Seconds Safety Watchdog Timer
+const WATCHDOG_TIMEOUT_MS = 25000; // 25 Seconds Safety Watchdog Timer
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return;
@@ -221,9 +221,9 @@ function advanceQueueWithRandomDelay() {
     return;
   }
 
-  // Base delay: 5 seconds (5000 ms) between messages
+  // Base delay: 12 seconds (12000 ms) between messages
   // Throttling: After every 10 messages, pause for 1 minute (60,000 ms)
-  let delayMs = 5000;
+  let delayMs = 12000;
   if (currentBatch.currentIndex % 10 === 0) {
     delayMs = 60000; // 1 minute rest after 10 messages
     console.log(`[CenterFlow WA] 1-minute safety rest after 10 messages (Index: ${currentBatch.currentIndex})`);

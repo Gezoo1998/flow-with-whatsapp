@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore, store } from "@/lib/store";
 import { 
   Plus, Trash2, Key, Info, RefreshCw, Layers, 
@@ -18,6 +18,18 @@ export default function SettingsView() {
   const [subjectVal, setSubjectVal] = useState(state.subject);
   const [teacherPinVal, setTeacherPinVal] = useState(state.teacherPin);
   const [teacherNameVal, setTeacherNameVal] = useState(state.teacherName || "");
+
+  useEffect(() => {
+    setSubjectVal(state.subject);
+  }, [state.subject]);
+
+  useEffect(() => {
+    setTeacherNameVal(state.teacherName || "");
+  }, [state.teacherName]);
+
+  useEffect(() => {
+    setTeacherPinVal(state.teacherPin);
+  }, [state.teacherPin]);
   const [lockEnabledVal, setLockEnabledVal] = useState(state.isLockAccessEnabled);
   const [lockStartVal, setLockStartVal] = useState(state.lockAccessStart || "19:00");
   const [lockEndVal, setLockEndVal] = useState(state.lockAccessEnd || "07:00");

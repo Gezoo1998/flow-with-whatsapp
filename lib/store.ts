@@ -687,11 +687,17 @@ class StateStore {
   // SUBJECT CONFIG
   public setSubject = (subject: "mathematics" | "physics" | "chemistry" | "science" | "science_en" | "math" | "arabic" | "english" | "social_studies") => {
     this.setState({ subject });
+    if (typeof window !== "undefined") {
+      import("./db").then(m => m.persistWholeStateToIndexedDB(this.getState())).catch(console.error);
+    }
     triggerBackgroundSync(true);
   };
 
   public setTeacherName = (name: string) => {
     this.setState({ teacherName: name });
+    if (typeof window !== "undefined") {
+      import("./db").then(m => m.persistWholeStateToIndexedDB(this.getState())).catch(console.error);
+    }
     triggerBackgroundSync(true);
   };
 
@@ -758,6 +764,9 @@ class StateStore {
     if (secExists) return { success: false, message: "الرمز السري مستخدم بالفعل من قِبل سكرتارية!" };
     
     this.setState({ teacherPin: newPin });
+    if (typeof window !== "undefined") {
+      import("./db").then(m => m.persistWholeStateToIndexedDB(this.getState())).catch(console.error);
+    }
     triggerBackgroundSync(true);
     return { success: true, message: "تم تغيير رمز المعلم بنجاح" };
   };

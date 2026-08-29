@@ -81,4 +81,19 @@ describe("WhatsApp Automation Engine Logic Unit Tests", () => {
     expect(result).toContain("أحمد محمد علي");
     expect(result).toContain("تسميع الفصل الأول: 18 / 20");
   });
+
+  it("should replace teacher name shortcodes properly", () => {
+    const teacherTemplate = "تقرير مادة [المادة] تحت إشراف [اسم_المعلم] للطالب [اسم_الطالب]";
+    const result = fillWhatsAppTemplate(
+      teacherTemplate,
+      dummyStudent1,
+      { id: "grp_1", name: "مجموعة الأحد" },
+      "physics",
+      { present: 1, absent: 0, attendanceRate: 100, scoresStr: "20 / 20" },
+      "د. محمد فرحات"
+    );
+
+    expect(result).toContain("د. محمد فرحات");
+    expect(result).toContain("الفيزياء ⚡");
+  });
 });
