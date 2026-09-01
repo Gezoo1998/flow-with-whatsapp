@@ -185,14 +185,32 @@ export default function WhatsAppAutomationView() {
       const score = scores[student.id];
       const numScore = Number(score);
 
-      // STRICT RULE: If no score/grade is recorded OR if score is 0, EXCLUDE automatically!
-      if (score === undefined || score === null || isNaN(numScore) || numScore === 0) {
+      const hasSecScore = (assessment as any).hasSecondScore;
+      const score2 = (assessment as any).scores2?.[student.id];
+      const maxScore2 = (assessment as any).maxScore2 || 10;
+      const numScore2 = Number(score2);
+
+      const hasValid1 = score !== undefined && score !== null && !isNaN(numScore) && numScore > 0;
+      const hasValid2 = hasSecScore && score2 !== undefined && score2 !== null && !isNaN(numScore2) && numScore2 > 0;
+
+      // STRICT RULE: If neither grade is valid (> 0), EXCLUDE automatically!
+      if (!hasValid1 && !hasValid2) {
         excluded++;
         return;
       }
 
-      const grp = (state.groups || []).find((g) => g.id === student.groupId);
-      const scoreStr = `${assessment.title}: ${score} / ${maxScore}`;
+      let scoreStr = "";
+      if (hasSecScore) {
+        if (hasValid1 && hasValid2) {
+          scoreStr = `${assessment.title}\n- الدرجة الأولى: ${score} / ${maxScore}\n- الدرجة الثانية: ${score2} / ${maxScore2}`;
+        } else if (hasValid1) {
+          scoreStr = `${assessment.title}\n- الدرجة الأولى: ${score} / ${maxScore}`;
+        } else if (hasValid2) {
+          scoreStr = `${assessment.title}\n- الدرجة الثانية: ${score2} / ${maxScore2}`;
+        }
+      } else {
+        scoreStr = `${assessment.title}\n- الدرجة: ${score} / ${maxScore}`;
+      }
 
       // Calculate real cumulative attendance stats up to current time
       let totalPresent = 0;

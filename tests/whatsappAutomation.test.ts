@@ -96,4 +96,32 @@ describe("WhatsApp Automation Engine Logic Unit Tests", () => {
     expect(result).toContain("د. محمد فرحات");
     expect(result).toContain("الفيزياء ⚡");
   });
+
+  it("should format dual-grade recitations (وش وظهر) with fixed labels", () => {
+    const dualRec = {
+      title: "تسميع الدرس الأول",
+      maxScore: 10,
+      maxScore2: 5,
+      hasSecondScore: true,
+      scores: { "st_101": 9 },
+      scores2: { "st_101": 4 }
+    };
+
+    const score1 = dualRec.scores["st_101"];
+    const score2 = dualRec.scores2["st_101"];
+    const scoreStr = `${dualRec.title}\n- الدرجة الأولى: ${score1} / ${dualRec.maxScore}\n- الدرجة الثانية: ${score2} / ${dualRec.maxScore2}`;
+
+    const template = "📊 آخر نتائج التقييم والامتحانات:\n[الدرجة]";
+    const result = fillWhatsAppTemplate(
+      template,
+      dummyStudent1,
+      { id: "grp_1", name: "مجموعة الأحد" },
+      "arabic",
+      { present: 1, absent: 0, attendanceRate: 100, scoresStr: scoreStr }
+    );
+
+    expect(result).toContain("تسميع الدرس الأول");
+    expect(result).toContain("- الدرجة الأولى: 9 / 10");
+    expect(result).toContain("- الدرجة الثانية: 4 / 5");
+  });
 });

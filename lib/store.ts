@@ -141,6 +141,11 @@ export interface RecitationRecord {
   maxScore: number;
   date: string; // YYYY-MM-DD
   scores: Record<string, number>; // studentId -> key, score -> value
+
+  // Optional Second Grade (وش وظهر)
+  hasSecondScore?: boolean;
+  maxScore2?: number;
+  scores2?: Record<string, number>; // studentId -> key, score2 -> value
 }
 
 export interface ExamRecord {
@@ -1022,7 +1027,16 @@ class StateStore {
   };
 
   // RECITATION ACTIONS (تسميع)
-  public recordRecitation = (groupId: string, title: string, maxScore: number, date: string, scores: Record<string, number>) => {
+  public recordRecitation = (
+    groupId: string,
+    title: string,
+    maxScore: number,
+    date: string,
+    scores: Record<string, number>,
+    hasSecondScore?: boolean,
+    maxScore2?: number,
+    scores2?: Record<string, number>
+  ) => {
     const newRec: RecitationRecord = {
       id: `rec_${Date.now()}`,
       groupId,
@@ -1030,13 +1044,16 @@ class StateStore {
       maxScore,
       date,
       scores,
+      hasSecondScore: !!hasSecondScore,
+      maxScore2: hasSecondScore ? (maxScore2 || 10) : undefined,
+      scores2: hasSecondScore ? (scores2 || {}) : undefined,
     };
     this.setState({
       recitations: [...this.state.recitations, newRec],
     });
 
     const studentCount = Object.keys(scores).length;
-    this.logActivity("رصد درجات تسميع", `رصد درجات عدد ${studentCount} طلاب في تسميع [${title}] (الدرجة النهائية من ${maxScore})`);
+    this.logActivity("رصد درجات تسميع", `رصد درجات عدد ${studentCount} طلاب في تسميع [${title}] (الدرجة النهائية من ${maxScore}${hasSecondScore ? ` / ${maxScore2}` : ""})`);
 
     import("./db").then(({ queueDeltaSyncEvent }) => {
       queueDeltaSyncEvent("ADD_RECITATION", newRec);

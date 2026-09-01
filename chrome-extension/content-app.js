@@ -3,41 +3,42 @@
  * Bridge between CenterFlow Next.js web application and Chrome Extension background worker.
  */
 
-// Safe helper to check if Chrome Extension context is valid
-function isContextValid() {
+(function () {
+  let isExtensionValid = false;
+
   try {
-    return Boolean(typeof chrome !== "undefined" && chrome && chrome.runtime && chrome.runtime.id);
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
+      isExtensionValid = true;
+    }
   } catch (e) {
-    return false;
+    isExtensionValid = false;
   }
-}
 
-// Notify webpage that extension is loaded
-function announcePresence() {
-  try {
-    window.postMessage(
-      {
-        type: "CENTERFLOW_EXTENSION_PONG",
-        version: "1.0.0",
-        status: "ready"
-      },
-      "*"
-    );
-  } catch (e) {
-    // Ignore postMessage errors
+  // Notify webpage that extension is loaded
+  function announcePresence() {
+    try {
+      window.postMessage(
+        {
+          type: "CENTERFLOW_EXTENSION_PONG",
+          version: "1.0.0",
+          status: "ready"
+        },
+        "*"
+      );
+    } catch (e) {
+      // Ignore postMessage errors
+    }
   }
-}
 
-// Initial presence ping
-if (isContextValid()) {
-  announcePresence();
-}
+  // Initial presence ping if extension valid
+  if (isExtensionValid) {
+    announcePresence();
+  }
 
-// Periodically check or listen for web application pings
-window.addEventListener("message", (event) => {
-  try {
-    // Check if extension context is valid
-    if (!isContextValid()) {
+  // Web message listener
+  function handleWebMessage(event) {
+    if (!isExtensionValid) {
+      window.removeEventListener("message", handleWebMessage);
       return;
     }
 
@@ -51,51 +52,60 @@ window.addEventListener("message", (event) => {
     if (type === "CENTERFLOW_CHECK_EXTENSION") {
       announcePresence();
     } else if (type === "START_WHATSAPP_BATCH") {
-      chrome.runtime.sendMessage(
-        {
-          action: "START_BATCH",
-          payload
-        },
-        (response) => {
-          try {
-            if (isContextValid() && chrome.runtime.lastError) {
-              console.error("[CenterFlow Extension] Error starting batch:", chrome.runtime.lastError);
-              window.postMessage(
-                {
-                  type: "WHATSAPP_BATCH_ERROR",
-                  error: chrome.runtime.lastError.message
-                },
-                "*"
-              );
+      try {
+        chrome.runtime.sendMessage(
+          {
+            action: "START_BATCH",
+            payload
+          },
+          (response) => {
+            if (!isExtensionValid) return;
+            try {
+              if (chrome.runtime && chrome.runtime.lastError) {
+                console.error("[CenterFlow Extension] Error starting batch:", chrome.runtime.lastError);
+                window.postMessage(
+                  {
+                    type: "WHATSAPP_BATCH_ERROR",
+                    error: chrome.runtime.lastError.message
+                  },
+                  "*"
+                );
+              }
+            } catch (e) {
+              isExtensionValid = false;
             }
-          } catch (e) {
-            // Ignore response error if context died
           }
-        }
-      );
+        );
+      } catch (err) {
+        isExtensionValid = false;
+        window.removeEventListener("message", handleWebMessage);
+      }
     } else if (type === "STOP_WHATSAPP_BATCH") {
-      if (isContextValid()) {
+      try {
         chrome.runtime.sendMessage({ action: "STOP_BATCH" });
+      } catch (err) {
+        isExtensionValid = false;
+        window.removeEventListener("message", handleWebMessage);
       }
     }
-  } catch (err) {
-    // Gracefully catch context invalidation when extension is reloaded/disabled
-    console.warn("[CenterFlow Extension] Extension context invalidated gracefully:", err);
   }
-});
 
-// Listen for updates from Background Service Worker and relay to web page
-try {
-  if (isContextValid() && chrome.runtime.onMessage) {
-    chrome.runtime.onMessage.addListener((message) => {
-      try {
-        if (!message || !message.type) return;
-        window.postMessage(message, "*");
-      } catch (err) {
-        // Ignore message relay errors
-      }
-    });
+  window.addEventListener("message", handleWebMessage);
+
+  // Background message listener
+  try {
+    if (isExtensionValid && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (!isExtensionValid) return;
+        try {
+          if (!message || !message.type) return;
+          window.postMessage(message, "*");
+        } catch (err) {
+          isExtensionValid = false;
+        }
+      });
+    }
+  } catch (err) {
+    isExtensionValid = false;
   }
-} catch (err) {
-  console.warn("[CenterFlow Extension] Listener context check skipped:", err);
-}
+})();

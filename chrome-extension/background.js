@@ -8,8 +8,53 @@ let isProcessing = false;
 let waTabId = null;
 let watchdogTimer = null;
 let delayTimer = null;
+let keepAliveInterval = null;
 
 const WATCHDOG_TIMEOUT_MS = 25000; // 25 Seconds Safety Watchdog Timer
+
+// KeepAlive Heartbeat: Prevents Manifest V3 Service Worker from sleeping during active batch processing
+function startKeepAlive() {
+  stopKeepAlive();
+  keepAliveInterval = setInterval(() => {
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getPlatformInfo) {
+      chrome.runtime.getPlatformInfo(() => {
+        // Keeps Manifest V3 Service Worker active in memory
+      });
+    }
+  }, 10000);
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+}
+
+// Persist batch state to chrome.storage.local to survive any service worker restarts
+function saveStateToStorage() {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.set({
+      cf_currentBatch: currentBatch,
+      cf_isProcessing: isProcessing
+    });
+  }
+}
+
+// Restore batch state from chrome.storage.local if service worker restarted
+function restoreStateFromStorage(cb) {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(["cf_currentBatch", "cf_isProcessing"], (result) => {
+      if (result.cf_currentBatch && result.cf_isProcessing) {
+        currentBatch = result.cf_currentBatch;
+        isProcessing = result.cf_isProcessing;
+      }
+      if (cb) cb();
+    });
+  } else {
+    if (cb) cb();
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return;
@@ -42,6 +87,7 @@ async function handleStartBatch(payload) {
 
   clearDelayTimer();
   clearWatchdog();
+  startKeepAlive();
 
   currentBatch = {
     batchId: payload.batchId || Date.now().toString(),
@@ -53,6 +99,8 @@ async function handleStartBatch(payload) {
   };
 
   isProcessing = true;
+  saveStateToStorage();
+
   notifyApp({
     type: "WHATSAPP_BATCH_STARTED",
     batchId: currentBatch.batchId,
@@ -65,9 +113,12 @@ async function handleStartBatch(payload) {
 function handleStopBatch() {
   clearWatchdog();
   clearDelayTimer();
+  stopKeepAlive();
   isProcessing = false;
+
   const batchId = currentBatch ? currentBatch.batchId : null;
   currentBatch = null;
+  saveStateToStorage();
 
   if (waTabId) {
     chrome.tabs.update(waTabId, { url: "https://web.whatsapp.com/" }, () => {
@@ -82,7 +133,14 @@ function handleStopBatch() {
 }
 
 async function processNextItem() {
-  if (!isProcessing || !currentBatch) return;
+  if (!isProcessing || !currentBatch) {
+    restoreStateFromStorage(() => {
+      if (isProcessing && currentBatch) {
+        processNextItem();
+      }
+    });
+    return;
+  }
 
   if (currentBatch.currentIndex >= currentBatch.items.length) {
     // Batch finished
@@ -93,8 +151,10 @@ async function processNextItem() {
       failedCount: currentBatch.failedCount,
       totalCount: currentBatch.totalCount
     });
+    stopKeepAlive();
     isProcessing = false;
     currentBatch = null;
+    saveStateToStorage();
     return;
   }
 
@@ -127,7 +187,7 @@ async function processNextItem() {
 
   const targetUrl = `https://web.whatsapp.com/send?phone=${cleanedPhone}&text=${encodeURIComponent(item.messageText)}&centerflow_id=${encodeURIComponent(item.studentId)}&centerflow_batch=${encodeURIComponent(currentBatch.batchId)}`;
 
-  // Set 14s Safety Watchdog Timer before navigating tab
+  // Set 25s Safety Watchdog Timer before navigating tab
   setWatchdog(item.studentId);
 
   // Navigate tab
@@ -142,7 +202,7 @@ async function processNextItem() {
 function setWatchdog(studentId) {
   clearWatchdog();
   watchdogTimer = setTimeout(() => {
-    console.warn(`[Watchdog] Timeout reached (14s) for student: ${studentId}`);
+    console.warn(`[Watchdog] Timeout reached (25s) for student: ${studentId}`);
     markCurrentItemFailed("تجاوز وقت الانتظار (الرقم قد يكون غير مسجل بالواتساب)");
   }, WATCHDOG_TIMEOUT_MS);
 }
@@ -187,6 +247,7 @@ function handleWaItemResult(msg) {
     });
   }
 
+  saveStateToStorage();
   advanceQueueWithRandomDelay();
 }
 
@@ -207,6 +268,7 @@ function markCurrentItemFailed(reason) {
     reason: reason
   });
 
+  saveStateToStorage();
   advanceQueueWithRandomDelay();
 }
 
@@ -215,6 +277,7 @@ function advanceQueueWithRandomDelay() {
 
   currentBatch.currentIndex++;
   clearDelayTimer();
+  saveStateToStorage();
 
   if (currentBatch.currentIndex >= currentBatch.items.length) {
     processNextItem();
@@ -222,16 +285,16 @@ function advanceQueueWithRandomDelay() {
   }
 
   // Base delay: 12 seconds (12000 ms) between messages
-  // Throttling: After every 10 messages, pause for 1 minute (60,000 ms)
+  // Safety rest: After every 10 messages, rest for 15 seconds (15000 ms)
   let delayMs = 12000;
-  if (currentBatch.currentIndex % 10 === 0) {
-    delayMs = 60000; // 1 minute rest after 10 messages
-    console.log(`[CenterFlow WA] 1-minute safety rest after 10 messages (Index: ${currentBatch.currentIndex})`);
+  if (currentBatch.currentIndex > 0 && currentBatch.currentIndex % 10 === 0) {
+    delayMs = 15000; // 15 seconds safety pause after every 10 messages
+    console.log(`[CenterFlow WA] 15-second safety rest after 10 messages (Index: ${currentBatch.currentIndex})`);
     notifyApp({
       type: "WHATSAPP_BATCH_PAUSED",
       batchId: currentBatch.batchId,
-      message: `فترة استراحة آمنة (دقيقة واحدة) بعد إرسال 10 رسائل... سيتأستأنف الإرسال تلقائياً (الرسالة ${currentBatch.currentIndex + 1} من ${currentBatch.totalCount})`,
-      resumeInMs: 60000
+      message: `فترة استراحة آمنة (15 ثانية) بعد إرسال 10 رسائل... سيتأستأنف الإرسال تلقائياً (الرسالة ${currentBatch.currentIndex + 1} من ${currentBatch.totalCount})`,
+      resumeInMs: 15000
     });
   }
 
@@ -265,11 +328,10 @@ function notifyApp(message) {
   chrome.tabs.query({}, (tabs) => {
     if (!tabs || tabs.length === 0) return;
     tabs.forEach((tab) => {
-      // Do not send app notifications to whatsapp web tabs
       if (tab.url && !tab.url.includes("web.whatsapp.com")) {
         chrome.tabs.sendMessage(tab.id, message, () => {
           if (chrome.runtime.lastError) {
-            // Ignore tab communication errors for non-matching pages
+            // Ignore tab communication errors
           }
         });
       }

@@ -16,18 +16,24 @@ export default function RecitationsView() {
   const [selectedGroupId, setSelectedGroupId] = useState(state.groups[0]?.id || "");
   const [formTitle, setFormTitle] = useState("");
   const [formMaxScore, setFormMaxScore] = useState("10");
+  const [formHasSecondScore, setFormHasSecondScore] = useState(false);
+  const [formMaxScore2, setFormMaxScore2] = useState("10");
   const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
   
-  // Scores entry map (studentId -> string)
+  // Scores entry maps (studentId -> string)
   const [scoresMap, setScoresMap] = useState<Record<string, string>>({});
+  const [scoresMap2, setScoresMap2] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Edit Recitation Form States (for selectedRecitationId)
   const [editTitle, setEditTitle] = useState("");
   const [editMaxScore, setEditMaxScore] = useState("10");
+  const [editHasSecondScore, setEditHasSecondScore] = useState(false);
+  const [editMaxScore2, setEditMaxScore2] = useState("10");
   const [editDate, setEditDate] = useState("");
   const [editScoresMap, setEditScoresMap] = useState<Record<string, string>>({});
+  const [editScoresMap2, setEditScoresMap2] = useState<Record<string, string>>({});
   const [editError, setEditError] = useState("");
   const [editSuccess, setEditSuccess] = useState(false);
 
@@ -49,21 +55,33 @@ export default function RecitationsView() {
   const handleGroupChange = (groupId: string) => {
     setSelectedGroupId(groupId);
     const emptyScores: Record<string, string> = {};
+    const emptyScores2: Record<string, string> = {};
     const relevantStudents = state.students.filter(
       st => st.groupId === groupId && st.status === "active"
     );
     relevantStudents.forEach(st => {
       emptyScores[st.id] = "";
+      emptyScores2[st.id] = "";
     });
     setScoresMap(emptyScores);
+    setScoresMap2(emptyScores2);
     setSaveSuccess(false);
     setFormTitle("");
+    setFormHasSecondScore(false);
     setFormError("");
   };
 
   const handleScoreChange = (stId: string, val: string) => {
     setSaveSuccess(false);
     setScoresMap(prev => ({
+      ...prev,
+      [stId]: val
+    }));
+  };
+
+  const handleScore2Change = (stId: string, val: string) => {
+    setSaveSuccess(false);
+    setScoresMap2(prev => ({
       ...prev,
       [stId]: val
     }));
@@ -77,24 +95,38 @@ export default function RecitationsView() {
     }));
   };
 
+  const handleEditScore2Change = (stId: string, val: string) => {
+    setEditSuccess(false);
+    setEditScoresMap2(prev => ({
+      ...prev,
+      [stId]: val
+    }));
+  };
+
   const handleOpenEdit = (rec: RecitationRecord) => {
     setSelectedRecitationId(rec.id);
     setEditTitle(rec.title);
     setEditMaxScore(rec.maxScore.toString());
+    setEditHasSecondScore(!!rec.hasSecondScore);
+    setEditMaxScore2(rec.maxScore2 ? rec.maxScore2.toString() : "10");
     setEditDate(rec.date);
     setEditError("");
     setEditSuccess(false);
 
     // Prefill scores for active students in that group
     const initialScores: Record<string, string> = {};
+    const initialScores2: Record<string, string> = {};
     const groupSts = state.students.filter(
       st => st.groupId === rec.groupId && st.status === "active"
     );
     groupSts.forEach(st => {
       const existing = rec.scores?.[st.id];
       initialScores[st.id] = existing !== undefined && existing !== null ? existing.toString() : "";
+      const existing2 = rec.scores2?.[st.id];
+      initialScores2[st.id] = existing2 !== undefined && existing2 !== null ? existing2.toString() : "";
     });
     setEditScoresMap(initialScores);
+    setEditScoresMap2(initialScores2);
   };
 
   const handleSaveNew = (e: React.FormEvent) => {
@@ -112,7 +144,14 @@ export default function RecitationsView() {
     }
 
     const maxGrade = Number(formMaxScore);
+    const maxGrade2 = Number(formMaxScore2);
+    if (formHasSecondScore && (isNaN(maxGrade2) || maxGrade2 <= 0)) {
+      setFormError("الرجاء تحديد الدرجة الكلية للوجه الثاني بشكل صحيح!");
+      return;
+    }
+
     const convertedScores: Record<string, number> = {};
+    const convertedScores2: Record<string, number> = {};
     let rangeError = false;
 
     groupStudents.forEach(st => {
@@ -125,16 +164,37 @@ export default function RecitationsView() {
           convertedScores[st.id] = numeric;
         }
       } else {
-        convertedScores[st.id] = 0; // default zero if not set
+        convertedScores[st.id] = 0;
+      }
+
+      if (formHasSecondScore) {
+        const enteredVal2 = scoresMap2[st.id];
+        if (enteredVal2 !== undefined && enteredVal2 !== "") {
+          const numeric2 = Number(enteredVal2);
+          if (isNaN(numeric2) || numeric2 < 0 || numeric2 > maxGrade2) {
+            rangeError = true;
+          } else {
+            convertedScores2[st.id] = numeric2;
+          }
+        }
       }
     });
 
     if (rangeError) {
-      setFormError(`خطأ! درجات رصد الحفظ يجب أن تقع بين 0 والحد الأقصى ${maxGrade}`);
+      setFormError(`خطأ! درجات التسميع يجب أن تقع بين 0 والحد الأقصى المسموح به`);
       return;
     }
 
-    store.recordRecitation(selectedGroupId, formTitle.trim(), maxGrade, formDate, convertedScores);
+    store.recordRecitation(
+      selectedGroupId,
+      formTitle.trim(),
+      maxGrade,
+      formDate,
+      convertedScores,
+      formHasSecondScore,
+      maxGrade2,
+      convertedScores2
+    );
     
     setSaveSuccess(true);
     setTimeout(() => {
@@ -143,6 +203,7 @@ export default function RecitationsView() {
       const cleared: Record<string, string> = {};
       groupStudents.forEach(st => { cleared[st.id] = ""; });
       setScoresMap(cleared);
+      setScoresMap2(cleared);
     }, 1500);
   };
 
@@ -162,8 +223,15 @@ export default function RecitationsView() {
       return;
     }
 
+    const maxGrade2 = Number(editMaxScore2);
+    if (editHasSecondScore && (isNaN(maxGrade2) || maxGrade2 <= 0)) {
+      setEditError("الرجاء تحديد الدرجة الكلية للوجه الثاني بشكل صحيح!");
+      return;
+    }
+
     // Convert scores & check range
     const convertedScores: Record<string, number> = {};
+    const convertedScores2: Record<string, number> = {};
     let rangeError = false;
 
     editTargetStudents.forEach(st => {
@@ -176,28 +244,35 @@ export default function RecitationsView() {
           convertedScores[st.id] = num;
         }
       }
+
+      if (editHasSecondScore) {
+        const val2 = editScoresMap2[st.id];
+        if (val2 !== undefined && val2 !== "") {
+          const num2 = Number(val2);
+          if (isNaN(num2) || num2 < 0 || num2 > maxGrade2) {
+            rangeError = true;
+          } else {
+            convertedScores2[st.id] = num2;
+          }
+        }
+      }
     });
 
     if (rangeError) {
-      setEditError(`خطأ! درجات التسميع يجب أن تقع بين 0 والحد الأقصى ${maxGrade}`);
+      setEditError(`خطأ! درجات التسميع يجب أن تقع بين 0 والحد الأقصى المسموح به`);
       return;
     }
 
-    // 1. Update metadata if changed
-    if (
-      editTitle.trim() !== currentRecitation.title ||
-      maxGrade !== currentRecitation.maxScore ||
-      editDate !== currentRecitation.date
-    ) {
-      store.updateRecitation(currentRecitation.id, {
-        title: editTitle.trim(),
-        maxScore: maxGrade,
-        date: editDate,
-      });
-    }
-
-    // 2. Save scores
-    store.saveRecitationScores(currentRecitation.id, convertedScores);
+    // Update recitation record
+    store.updateRecitation(currentRecitation.id, {
+      title: editTitle.trim(),
+      maxScore: maxGrade,
+      date: editDate,
+      scores: convertedScores,
+      hasSecondScore: editHasSecondScore,
+      maxScore2: editHasSecondScore ? maxGrade2 : undefined,
+      scores2: editHasSecondScore ? convertedScores2 : undefined,
+    });
 
     setEditSuccess(true);
     setTimeout(() => {
@@ -323,6 +398,31 @@ export default function RecitationsView() {
                   className="w-full bg-white dark:bg-slate-950 border border-slate-250 dark:border-slate-800 rounded-xl p-2 font-bold focus:outline-none text-center text-slate-800 dark:text-slate-100 font-mono"
                 />
               </div>
+
+              {/* Toggle Second Grade Edit */}
+              <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl sm:col-span-3">
+                <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editHasSecondScore}
+                    onChange={(e) => setEditHasSecondScore(e.target.checked)}
+                    className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                  <span>تفعيل درجة ثانية للتسميع (ورقة وش وظهر) 📄</span>
+                </label>
+                {editHasSecondScore && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="font-bold text-slate-500">الدرجة الثانية من:</span>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editMaxScore2}
+                      onChange={(e) => setEditMaxScore2(e.target.value)}
+                      className="w-16 bg-blue-50/80 dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-lg p-1 text-center font-black text-xs text-blue-900 dark:text-blue-100"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -330,7 +430,7 @@ export default function RecitationsView() {
           <form onSubmit={handleSaveEdit} className="space-y-3">
             <div className="flex justify-between items-center px-1">
               <h3 className="text-xs font-black text-slate-800 dark:text-slate-200">
-                درجات الطلاب المستهدفين (يدعم الكسور والكسور العشرية):
+                درجات الطلاب المستهدفين:
               </h3>
               <AnimatePresence>
                 {editSuccess && (
@@ -377,22 +477,44 @@ export default function RecitationsView() {
                 editTargetStudents.map((st) => (
                   <div 
                     key={st.id}
-                    className="flex items-center justify-between p-4 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-800 rounded-2xl h-[64px]"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-800 rounded-2xl gap-2"
                   >
-                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate max-w-[65%]">{st.name}</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate">{st.name}</span>
                     
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <input 
-                        type="number"
-                        step="any"
-                        min="0"
-                        max={editMaxScore}
-                        value={editScoresMap[st.id] !== undefined ? editScoresMap[st.id] : ""}
-                        onChange={(e) => handleEditScoreChange(st.id, e.target.value)}
-                        placeholder="--"
-                        className="w-20 bg-blue-50/80 dark:bg-slate-900 border-2 border-blue-200/80 dark:border-blue-900/50 text-blue-950 dark:text-blue-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl py-1.5 px-2 text-center font-black text-sm font-mono shadow-xs focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-blue-500/25 transition-all duration-150"
-                      />
-                      <span className="text-slate-450 dark:text-slate-500 text-[10px] font-bold">/ {editMaxScore}</span>
+                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+                      {/* Score 1 */}
+                      <div className="flex items-center gap-1">
+                        {editHasSecondScore && <span className="text-[10px] font-extrabold text-slate-400">د1:</span>}
+                        <input 
+                          type="number"
+                          step="any"
+                          min="0"
+                          max={editMaxScore}
+                          value={editScoresMap[st.id] !== undefined ? editScoresMap[st.id] : ""}
+                          onChange={(e) => handleEditScoreChange(st.id, e.target.value)}
+                          placeholder="--"
+                          className="w-16 bg-blue-50/80 dark:bg-slate-900 border-2 border-blue-200/80 dark:border-blue-900/50 text-blue-950 dark:text-blue-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl py-1.5 px-2 text-center font-black text-xs font-mono shadow-xs focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-blue-500/25 transition-all duration-150"
+                        />
+                        <span className="text-slate-450 dark:text-slate-500 text-[10px] font-bold">/ {editMaxScore}</span>
+                      </div>
+
+                      {/* Score 2 Optional */}
+                      {editHasSecondScore && (
+                        <div className="flex items-center gap-1 border-r pr-3 border-slate-200 dark:border-slate-800">
+                          <span className="text-[10px] font-extrabold text-purple-500">د2:</span>
+                          <input 
+                            type="number"
+                            step="any"
+                            min="0"
+                            max={editMaxScore2}
+                            value={editScoresMap2[st.id] !== undefined ? editScoresMap2[st.id] : ""}
+                            onChange={(e) => handleEditScore2Change(st.id, e.target.value)}
+                            placeholder="--"
+                            className="w-16 bg-purple-50/80 dark:bg-slate-900 border-2 border-purple-200/80 dark:border-purple-900/50 text-purple-950 dark:text-purple-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl py-1.5 px-2 text-center font-black text-xs font-mono shadow-xs focus:outline-none focus:border-purple-600 dark:focus:border-purple-400 focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-purple-500/25 transition-all duration-150"
+                          />
+                          <span className="text-slate-450 dark:text-slate-500 text-[10px] font-bold">/ {editMaxScore2}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
@@ -512,6 +634,31 @@ export default function RecitationsView() {
                   />
                 </div>
               </div>
+
+              {/* Toggle Second Grade New */}
+              <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
+                <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formHasSecondScore}
+                    onChange={(e) => setFormHasSecondScore(e.target.checked)}
+                    className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                  <span>تفعيل درجة ثانية للتسميع (ورقة وش وظهر) 📄</span>
+                </label>
+                {formHasSecondScore && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="font-bold text-slate-500">الدرجة الثانية من:</span>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formMaxScore2}
+                      onChange={(e) => setFormMaxScore2(e.target.value)}
+                      className="w-16 bg-blue-50/80 dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-lg p-1 text-center font-black text-xs text-blue-900 dark:text-blue-100"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -565,23 +712,44 @@ export default function RecitationsView() {
                 groupStudents.map((st) => (
                   <div 
                     key={st.id}
-                    className="flex items-center justify-between p-4 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-800 rounded-2xl h-[64px]"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-800 rounded-2xl gap-2"
                   >
-                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate max-w-[65%]">{st.name}</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate">{st.name}</span>
                     
-                    {/* Direct Score Input - with step="any" for decimals */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <input 
-                        type="number"
-                        step="any"
-                        min="0"
-                        max={formMaxScore}
-                        value={scoresMap[st.id] || ""}
-                        onChange={(e) => handleScoreChange(st.id, e.target.value)}
-                        placeholder="--"
-                        className="w-20 bg-blue-50/80 dark:bg-slate-900 border-2 border-blue-200/80 dark:border-blue-900/50 text-blue-950 dark:text-blue-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl py-1.5 px-2 text-center font-black text-sm font-mono shadow-xs focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-blue-500/25 transition-all duration-150"
-                      />
-                      <span className="text-slate-450 dark:text-slate-500 text-[10px] font-bold">/ {formMaxScore}</span>
+                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+                      {/* Score 1 */}
+                      <div className="flex items-center gap-1">
+                        {formHasSecondScore && <span className="text-[10px] font-extrabold text-slate-400">د1:</span>}
+                        <input 
+                          type="number"
+                          step="any"
+                          min="0"
+                          max={formMaxScore}
+                          value={scoresMap[st.id] || ""}
+                          onChange={(e) => handleScoreChange(st.id, e.target.value)}
+                          placeholder="--"
+                          className="w-16 bg-blue-50/80 dark:bg-slate-900 border-2 border-blue-200/80 dark:border-blue-900/50 text-blue-950 dark:text-blue-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl py-1.5 px-2 text-center font-black text-xs font-mono shadow-xs focus:outline-none focus:border-blue-600 dark:focus:border-blue-400 focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-blue-500/25 transition-all duration-150"
+                        />
+                        <span className="text-slate-450 dark:text-slate-500 text-[10px] font-bold">/ {formMaxScore}</span>
+                      </div>
+
+                      {/* Score 2 Optional */}
+                      {formHasSecondScore && (
+                        <div className="flex items-center gap-1 border-r pr-3 border-slate-200 dark:border-slate-800">
+                          <span className="text-[10px] font-extrabold text-purple-500">د2:</span>
+                          <input 
+                            type="number"
+                            step="any"
+                            min="0"
+                            max={formMaxScore2}
+                            value={scoresMap2[st.id] || ""}
+                            onChange={(e) => handleScore2Change(st.id, e.target.value)}
+                            placeholder="--"
+                            className="w-16 bg-purple-50/80 dark:bg-slate-900 border-2 border-purple-200/80 dark:border-purple-900/50 text-purple-950 dark:text-purple-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl py-1.5 px-2 text-center font-black text-xs font-mono shadow-xs focus:outline-none focus:border-purple-600 dark:focus:border-purple-400 focus:bg-white dark:focus:bg-slate-950 focus:ring-2 focus:ring-purple-500/25 transition-all duration-150"
+                          />
+                          <span className="text-slate-450 dark:text-slate-500 text-[10px] font-bold">/ {formMaxScore2}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))

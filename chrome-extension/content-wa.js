@@ -74,15 +74,18 @@
           if (typeof clickableBtn.focus === "function") {
             clickableBtn.focus();
           }
+          
+          // Trigger click event ONCE to prevent double sending
           if (typeof clickableBtn.click === "function") {
             clickableBtn.click();
+          } else {
+            const clickEvent = new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            clickableBtn.dispatchEvent(clickEvent);
           }
-          const clickEvent = new MouseEvent("click", {
-            bubbles: true,
-            cancelable: true,
-            view: window
-          });
-          clickableBtn.dispatchEvent(clickEvent);
 
           console.log(`[CenterFlow WA] Send button clicked successfully for student: ${studentId}`);
           
