@@ -106,12 +106,20 @@
   }, 400);
 
   function notifyBackground(success, reason = "") {
-    chrome.runtime.sendMessage({
-      action: "WA_ITEM_RESULT",
-      studentId: studentId,
-      batchId: batchId,
-      success: success,
-      reason: reason
-    });
+    try {
+      if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) {
+        console.warn("[CenterFlow WA] Extension context invalidated in content-wa.");
+        return;
+      }
+      chrome.runtime.sendMessage({
+        action: "WA_ITEM_RESULT",
+        studentId: studentId,
+        batchId: batchId,
+        success: success,
+        reason: reason
+      });
+    } catch (err) {
+      console.warn("[CenterFlow WA] Failed to notify background worker:", err);
+    }
   }
 })();
