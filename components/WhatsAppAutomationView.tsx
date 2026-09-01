@@ -140,7 +140,7 @@ export default function WhatsAppAutomationView() {
   const activeTemplate = useMemo(() => {
     return (
       (state.whatsappTemplates || [])[0]?.text ||
-      "مرحبا بولي أمر الطالب: *[اسم_الطالب]* 🌸\nنرسل لحضراتكم تقرير متابعة مادة *[المادة]* لمجموعة *[المجموعة]*:\n\n📊 نتيجة التقييم:\n[الدرجة]"
+      "مرحبا بولي أمر الطالب: *[اسم_الطالب]* 🌸\nنرسل لحضراتكم تقرير متابعة مادة *[المادة]* تحت إشراف أستاذ/ *[اسم_المعلم]*\nلمجموعة *[المجموعة]*:\n\n📌 الحضور والمواظبة:\n- نسبة الالتزام: [الحالة]\n- حضر: [حضر] حصة | غاب: [غاب] حصة\n\n📊 آخر نتائج التقييم والامتحانات:\n[الدرجة]\n\nنشكر حسن تعاونكم للمصلحة الدراسية لولدنا. ❤️"
     );
   }, [state.whatsappTemplates]);
 
@@ -154,7 +154,7 @@ export default function WhatsAppAutomationView() {
     }
   }, [reportType, selectedAssessmentId, state.recitations, state.exams]);
 
-  // Calculate target student list & apply STRICT EXCLUSION for missing grades
+  // Calculate target student list & apply STRICT EXCLUSION for missing grades or zero score
   const { eligibleItems, excludedCount } = useMemo(() => {
     if (!selectedAssessmentObj) {
       return { eligibleItems: [], excludedCount: 0 };
@@ -183,9 +183,10 @@ export default function WhatsAppAutomationView() {
 
     groupStudents.forEach((student) => {
       const score = scores[student.id];
+      const numScore = Number(score);
 
-      // STRICT RULE: If no score/grade is recorded, EXCLUDE automatically!
-      if (score === undefined || score === null || score === undefined) {
+      // STRICT RULE: If no score/grade is recorded OR if score is 0, EXCLUDE automatically!
+      if (score === undefined || score === null || isNaN(numScore) || numScore === 0) {
         excluded++;
         return;
       }
@@ -193,15 +194,32 @@ export default function WhatsAppAutomationView() {
       const grp = (state.groups || []).find((g) => g.id === student.groupId);
       const scoreStr = `${assessment.title}: ${score} / ${maxScore}`;
 
+      // Calculate real cumulative attendance stats up to current time
+      let totalPresent = 0;
+      let totalAbsent = 0;
+
+      (state.attendance || []).forEach((att) => {
+        if (att.groupId === student.groupId || selectedGroupId === "all") {
+          if (att.presentStudentIds?.includes(student.id)) {
+            totalPresent++;
+          } else if (att.absentStudentIds?.includes(student.id)) {
+            totalAbsent++;
+          }
+        }
+      });
+
+      const totalSessions = totalPresent + totalAbsent;
+      const attendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 100;
+
       const formattedText = fillWhatsAppTemplate(
         activeTemplate,
         student,
         grp,
         state.subject || "mathematics",
         {
-          present: 1,
-          absent: 0,
-          attendanceRate: 100,
+          present: totalPresent,
+          absent: totalAbsent,
+          attendanceRate: attendanceRate,
           scoresStr: scoreStr
         },
         state.teacherName

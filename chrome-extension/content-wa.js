@@ -25,22 +25,24 @@
   console.log(`[CenterFlow WA Lock] Lock set for student: ${studentId}`);
 
   let attempts = 0;
-  const maxAttempts = 30; // 30 attempts * 400ms = 12 seconds max DOM search
+  const maxAttempts = 50; // 50 attempts * 400ms = 20 seconds max DOM search
 
   const pollInterval = setInterval(() => {
     attempts++;
 
     // 1. Check for invalid number error modal
     const invalidModal = document.querySelector(
-      'div[data-animate-modal-body="true"], [data-testid="popup-contents"]'
+      'div[data-animate-modal-body="true"], [data-testid="popup-contents"], div[role="dialog"], div[data-tab="2"]'
     );
     if (invalidModal) {
-      const text = invalidModal.innerText || "";
+      const text = (invalidModal.innerText || "").toLowerCase();
       if (
         text.includes("غير صحيح") ||
         text.includes("invalid") ||
         text.includes("غير مسجل") ||
-        text.includes("Phone number")
+        text.includes("phone number") ||
+        text.includes("not on whatsapp") ||
+        text.includes("لا يملك حساباً")
       ) {
         clearInterval(pollInterval);
         notifyBackground(false, "رقم غير مسجل في الواتساب أو الرابط غير صحيح");
@@ -52,8 +54,14 @@
     const sendButton =
       document.querySelector('button span[data-icon="send"]') ||
       document.querySelector('span[data-icon="send"]') ||
+      document.querySelector('span[data-icon="send-light"]') ||
       document.querySelector('button[aria-label="Send"]') ||
-      document.querySelector('button[aria-label="إرسال"]');
+      document.querySelector('button[aria-label="إرسال"]') ||
+      document.querySelector('button[aria-label="إرسال "]') ||
+      document.querySelector('button[aria-label="Send "]') ||
+      document.querySelector('footer button span[data-icon="send"]') ||
+      document.querySelector('footer button[aria-label*="إرسال"]') ||
+      document.querySelector('footer button[aria-label*="Send"]');
 
     if (sendButton) {
       clearInterval(pollInterval);
@@ -63,25 +71,29 @@
 
       setTimeout(() => {
         try {
-          // Trigger click event on send button EXACTLY ONCE to prevent double sending
+          if (typeof clickableBtn.focus === "function") {
+            clickableBtn.focus();
+          }
           if (typeof clickableBtn.click === "function") {
             clickableBtn.click();
-          } else {
-            const clickEvent = new MouseEvent("click", {
-              bubbles: true,
-              cancelable: true,
-              view: window
-            });
-            clickableBtn.dispatchEvent(clickEvent);
           }
+          const clickEvent = new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            view: window
+          });
+          clickableBtn.dispatchEvent(clickEvent);
 
           console.log(`[CenterFlow WA] Send button clicked successfully for student: ${studentId}`);
-          notifyBackground(true);
+          
+          setTimeout(() => {
+            notifyBackground(true);
+          }, 400);
         } catch (err) {
           console.error(`[CenterFlow WA] Click execution error:`, err);
           notifyBackground(false, "خطأ أثناء النقر على زر الإرسال");
         }
-      }, 500);
+      }, 400);
 
       return;
     }
