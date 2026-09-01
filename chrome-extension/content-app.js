@@ -3,6 +3,15 @@
  * Bridge between CenterFlow Next.js web application and Chrome Extension background worker.
  */
 
+// Safe helper to check if Chrome Extension context is valid
+function isContextValid() {
+  try {
+    return Boolean(typeof chrome !== "undefined" && chrome && chrome.runtime && chrome.runtime.id);
+  } catch (e) {
+    return false;
+  }
+}
+
 // Notify webpage that extension is loaded
 function announcePresence() {
   try {
@@ -20,13 +29,15 @@ function announcePresence() {
 }
 
 // Initial presence ping
-announcePresence();
+if (isContextValid()) {
+  announcePresence();
+}
 
 // Periodically check or listen for web application pings
 window.addEventListener("message", (event) => {
   try {
     // Check if extension context is valid
-    if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id) {
+    if (!isContextValid()) {
       return;
     }
 
@@ -47,7 +58,7 @@ window.addEventListener("message", (event) => {
         },
         (response) => {
           try {
-            if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.lastError) {
+            if (isContextValid() && chrome.runtime.lastError) {
               console.error("[CenterFlow Extension] Error starting batch:", chrome.runtime.lastError);
               window.postMessage(
                 {
@@ -63,7 +74,9 @@ window.addEventListener("message", (event) => {
         }
       );
     } else if (type === "STOP_WHATSAPP_BATCH") {
-      chrome.runtime.sendMessage({ action: "STOP_BATCH" });
+      if (isContextValid()) {
+        chrome.runtime.sendMessage({ action: "STOP_BATCH" });
+      }
     }
   } catch (err) {
     // Gracefully catch context invalidation when extension is reloaded/disabled
@@ -73,7 +86,7 @@ window.addEventListener("message", (event) => {
 
 // Listen for updates from Background Service Worker and relay to web page
 try {
-  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.runtime.onMessage) {
+  if (isContextValid() && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message) => {
       try {
         if (!message || !message.type) return;
