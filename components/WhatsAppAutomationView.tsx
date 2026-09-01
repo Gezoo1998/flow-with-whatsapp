@@ -228,6 +228,7 @@ export default function WhatsAppAutomationView() {
 
       const totalSessions = totalPresent + totalAbsent;
       const attendanceRate = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 100) : 100;
+      const grp = (state.groups || []).find((g) => g.id === student.groupId);
 
       const formattedText = fillWhatsAppTemplate(
         activeTemplate,
